@@ -3,7 +3,7 @@
 Plugin Name: Scoop.It Importer
 Plugin URI: http://june22.eu
 Description: Import automatically all curated posts from a specific Scoop.It topic as WordPress CPT
-Version: 1.3
+Version: 1.3.2
 Author: Thomas Charbit
 Author URI: https://twitter.com/thomascharbit
 Author Email: thomas.charbit@gmail.com
@@ -165,8 +165,8 @@ class ScoopitImporter {
         
             // test username
             try {
-                $userAccountData = $scoop->resolve( 'User', $this->settings['scoopit_account'] );
-                $profile = $scoop->profile($userAccountData->id);
+                $useraccount_data = $scoop->resolve( 'User', $this->settings['scoopit_account'] );
+                $profile = $scoop->profile($useraccount_data->id);
                 $topics = $profile->user->curatedTopics;
             }
             catch ( ScoopAuthenticationException $resolveUserError ) {
@@ -185,6 +185,7 @@ class ScoopitImporter {
 
 
     public function more_schedules( $schedules ) {
+
         $more_schedules = array(
             'fiveminutes' => array(
                 'interval' => 300,
@@ -199,22 +200,30 @@ class ScoopitImporter {
                 'display' => __('Twice Hourly')
             )
         );
-        return array_merge( $schedules,$more_schedules );
+
+        return array_merge( $schedules, $more_schedules );
+
     }
 
 
     public function scoopit_import_topic() {
+
         global $wpdb;
+
         $this->get_settings();
-        // if no topic is configured, do nothing
+
+        // do nothing if no topic was configured
         if ( $this->settings['scoopit_topic'] === NULL ) return false;
         
         // load scoopit
         include_once( plugin_dir_path(__FILE__) . 'Scoopit-PHP/ScoopIt.php' );
+
         $scoop = new ScoopIt( new WpTokenStore(), $this->settings['scoopit_consumer_key'], $this->settings['scoopit_consumer_secret'] );
+        
         // get when we did last update
-        $lastupdate_timestamp = get_option( 'scoopit.last_update' );
+        $lastupdate_timestamp = get_option( 'scoopitimporter.last_update' );
         if ( ( !$lastupdate_timestamp ) || ( $lastupdate_timestamp== '' ) ) $lastupdate_timestamp = 0;
+        
         // get existing scoopit posts IDs in worpdress
         $query = $wpdb->prepare("
             SELECT  meta_value
@@ -228,50 +237,56 @@ class ScoopitImporter {
             '_scoopit_id'
         );
 
-        $existingPosts = $wpdb->get_col( $query );
-        $createPostError = false;
-        $current_time = round( microtime( true ) * 1000 );
+        $existing_posts = $wpdb->get_col( $query );
+        $create_post_error = false;
+
+        $current_time = current_time( 'timestamp' );
 
         try {
             // get new posts from scoopit
             $topic = $scoop->topic( $this->settings['scoopit_topic'], 999, 0, 0, $lastupdate_timestamp );
-            $curatedPosts = array_reverse($topic->curatedPosts );
-            $createPostError = false;           
-            foreach ( $curatedPosts as $curatedPost ) {
+            $curated_posts = array_reverse($topic->curatedPosts );
+            $create_post_error = false; 
+
+            foreach ( $curated_posts as $curated_post ) {
 
                 // check if already exists
-                if ( !in_array( $curatedPost->id, $existingPosts) ) {
+                if ( !in_array($curated_post->id, $existing_posts) ) {
                     
-                    $attachment_id = $this->get_image($curatedPost->largeImageUrl, 0, $curatedPost->title);
+                    $attachment_id = $this->get_image($curated_post->largeImageUrl, 0, $curated_post->title);
                     
                     $post_data = array(
                         'post_type'     => $this->settings['post_type'],
-                        'post_title'    => $curatedPost->title,
-                        'post_content'  => $curatedPost->htmlContent,
+                        'post_title'    => $curated_post->title,
+                        'post_content'  => $curated_post->htmlContent,
                         'post_author'   => $this->settings['post_author'],
                         'post_status'   => $this->settings['post_status'],
                         // convert GMT to local time
-                        'post_date' => date( 'Y-m-d H:i:s', $curatedPost->curationDate / 1000 + ( get_option( 'gmt_offset' ) * 3600 ) )
+                        'post_date' => date( 'Y-m-d H:i:s', $curated_post->curationDate / 1000 + ( get_option( 'gmt_offset' ) * 3600 ) )
                     );
                     
-                    $post_data = apply_filters( 'scoopit_wp_insert_post_data', $post_data, $curatedPost );
+                    $post_data = apply_filters( 'scoopit_wp_insert_post_data', $post_data, $curated_post );
                     // insert post
                     $post_id = wp_insert_post( $post_data );
 
                     // store original scoopit id as custom field
                     if ( $post_id > 0 ) {
-                        add_post_meta( $post_id,'_scoopit_id', $curatedPost->id );
+                        add_post_meta( $post_id,'_scoopit_id', $curated_post->id );
                         add_post_meta( $post_id,'_thumbnail_id', $attachment_id );
                         if ( ! is_wp_error($attachment_id) ) wp_update_post( array('ID' => $attachment_id, 'post_parent' => $post_id));
-                        do_action( 'scoopit_after_wp_insert_post',$post_id, $curatedPost );
+                        do_action( 'scoopit_after_wp_insert_post', $post_id, $curated_post );
                     }
-                    else $createPostError = true;
+                    else $create_post_error = true;
                 }
             }
 
             // import successful, lets update our update timestamp
-            if (!$createPostError)
-                update_option('scoopit.last_update',$current_time);
+            if ( !$create_post_error ) {
+
+                update_option( 'scoopitimporter.last_update', (string) $current_time );
+
+            }
+
 
         }
         catch ( ScoopAuthenticationException $resolveUserError ) {
@@ -280,58 +295,29 @@ class ScoopitImporter {
     }
 
     private function get_settings() {
-        $this->settings = get_option( 'scoopit_settings' );
-        /*
-        $this->settings = array(
-            'scoopit_consumer_key'      => get_option( 'scoopit_consumerKey' ),
-            'scoopit_consumer_secret'   => get_option( 'scoopit_consumerSecret' ),
-            'scoopit_account'           => get_option( 'scoopit_account' ),
-            'scoopit_topic'             => get_option( 'scoopit_topic' ),
-            'recurrence'                => get_option( 'scoopit_recurrence' ),
-            'post_type'                 => get_option( 'scoopit_post_type' ),
-            'post_author'               => get_option( 'scoopit_post_author' ),
-            'post_status'               => get_option( 'scoopit_post_status' ),
-        );
-        */
-        
-        array_walk( $this->settings, array( $this, 'merge_settings' ) );
+
+        $this->settings = get_option( 'scoopitimporter.settings' );
+
+        if ( !is_array($this->settings) ) $this->settings = array();
+
+        $this->settings = array_merge( $this->defaults, $this->settings );
+
     }
 
     private function save_settings() {
-        update_option( 'scoopit_settings', $this->settings );
 
-       /* update_option( 'scoopit_consumerKey', $this->settings['scoopit_consumer_key'] );
-        update_option( 'scoopit_consumerSecret', $this->settings['scoopit_consumer_secret'] );
-        update_option( 'scoopit_account', $this->settings['scoopit_account'] );
-        update_option( 'scoopit_topic', $this->settings['scoopit_topic'] );
-        update_option( 'scoopit_recurrence', $this->settings['recurrence'] );
-        update_option( 'scoopit_post_type', $this->settings['post_type'] );
-        update_option( 'scoopit_post_author', $this->settings['post_author'] );
-        update_option( 'scoopit_post_status', $this->settings['post_status'] );
-        */
-    }  
+        update_option( 'scoopitimporter.settings', $this->settings );
+
+    }
     
     private function clear_settings() {
-        delete_option( 'scoopit_settings' );
-        /*
-        delete_option( 'scoopit_consumerKey' );
-        delete_option( 'scoopit_consumerSecret' );
-        delete_option( 'scoopit_account' );
-        delete_option( 'scoopit_topic' );
-        delete_option( 'scoopit_recurrence' );
-        delete_option( 'scoopit_post_type' );
-        delete_option( 'scoopit_post_author' );
-        delete_option( 'scoopit_post_status' );
-        */
+
+        delete_option( 'scoopitimporter.settings' );
+
     }
 
-    private function merge_settings( &$value, $key ) {
-        if ( ( !$value) || $value == '' ) {
-            $value = $this->defaults[$key];
-        }
-    }
-    
-    private function get_image($file, $post_id, $desc = null){
+
+    private function get_image($file, $post_id, $desc = null) {
         require_once(ABSPATH . 'wp-admin/includes/media.php');
         require_once(ABSPATH . 'wp-admin/includes/file.php');
         require_once(ABSPATH . 'wp-admin/includes/image.php');
@@ -361,8 +347,7 @@ class ScoopitImporter {
         else return false;
     }
     
-    private function file_ext_and_type($full_path_to_image='')
-    {
+    private function file_ext_and_type($full_path_to_image='') {
         $extension = 'null';
         if($image_type = exif_imagetype($full_path_to_image))
         {
