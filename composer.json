@@ -1,0 +1,13 @@
+{
+    "name": "june22/wp-scoopit-importer",
+    "description": "Import automatically all curated posts from a specific Scoop.It topic as WordPress CPT",
+    "authors": [
+        {
+            "name": "Thomas Charbit",
+            "email": "thomas.charbit@gmail.com"
+        }
+    ],
+    "require": {
+
+    }
+}
