@@ -87,6 +87,7 @@ class ScoopitImporter {
 
     } // end deactivate
 
+
     /**
      * Loads the plugin text domain for translation
      */
@@ -106,7 +107,7 @@ class ScoopitImporter {
      * Core Functions
      *---------------------------------------------*/
 
-     
+
     public function admin_menu() {
 
         add_options_page(
@@ -118,6 +119,7 @@ class ScoopitImporter {
         );
 
     }
+
 
     public function admin_page() {
         // Make sure the user has the required permissions to view the settings.
@@ -181,7 +183,7 @@ class ScoopitImporter {
 
     }
 
-    
+
     public function more_schedules( $schedules ) {
         $more_schedules = array(
             'fiveminutes' => array(
@@ -199,7 +201,8 @@ class ScoopitImporter {
         );
         return array_merge( $schedules,$more_schedules );
     }
-    
+
+
     public function scoopit_import_topic() {
         global $wpdb;
         $this->get_settings();
@@ -276,10 +279,6 @@ class ScoopitImporter {
         }
     }
 
-    private function prepare_post( $curatedPost ) {
-
-    }
-    
     private function get_settings() {
         $this->settings = get_option( 'scoopit_settings' );
         /*
