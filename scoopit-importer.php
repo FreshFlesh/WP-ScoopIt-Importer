@@ -3,7 +3,7 @@
 Plugin Name: Scoop.It Importer
 Plugin URI: http://june22.eu
 Description: Import automatically all curated posts from a specific Scoop.It topic as WordPress CPT
-Version: 1.3.2
+Version: 1.3.3
 Author: Thomas Charbit
 Author URI: https://twitter.com/thomascharbit
 Author Email: thomas.charbit@gmail.com
@@ -128,7 +128,12 @@ class ScoopitImporter {
         }
         
         $this->get_settings();
-        
+
+        // Form submit handler
+        if ( isset( $_POST['scoopit-force'] ) && check_admin_referer( 'scoopit-form-force' ) ) {
+            do_action('scoopit_scheduled_hook');
+        }
+
         // Form submit handler
         if ( isset( $_POST['scoopit-submit'] ) && check_admin_referer( 'scoopit-form' ) ) {
             $this->settings = array_merge( $this->settings, array(
@@ -214,7 +219,7 @@ class ScoopitImporter {
 
         // do nothing if no topic was configured
         if ( $this->settings['scoopit_topic'] === NULL ) return false;
-        
+
         // load scoopit
         include_once( plugin_dir_path(__FILE__) . 'Scoopit-PHP/ScoopIt.php' );
 
@@ -247,14 +252,16 @@ class ScoopitImporter {
             $topic = $scoop->topic( $this->settings['scoopit_topic'], 999, 0, 0, $lastupdate_timestamp );
             $curated_posts = array_reverse($topic->curatedPosts );
             $create_post_error = false; 
-
+            
             foreach ( $curated_posts as $curated_post ) {
 
                 // check if already exists
                 if ( !in_array($curated_post->id, $existing_posts) ) {
-                    
-                    $attachment_id = $this->get_image($curated_post->largeImageUrl, 0, $curated_post->title);
-                    
+
+                    if ( isset($curated_post->largeImageUrl) ) {
+                        $attachment_id = $this->get_image($curated_post->largeImageUrl, 0, $curated_post->title);
+                    }
+
                     $post_data = array(
                         'post_type'     => $this->settings['post_type'],
                         'post_title'    => $curated_post->title,
@@ -272,8 +279,12 @@ class ScoopitImporter {
                     // store original scoopit id as custom field
                     if ( $post_id > 0 ) {
                         add_post_meta( $post_id,'_scoopit_id', $curated_post->id );
-                        add_post_meta( $post_id,'_thumbnail_id', $attachment_id );
-                        if ( ! is_wp_error($attachment_id) ) wp_update_post( array('ID' => $attachment_id, 'post_parent' => $post_id));
+                        
+                        if ( isset($attachment_id) && ! is_wp_error($attachment_id) ) {
+                            add_post_meta( $post_id,'_thumbnail_id', $attachment_id );
+                            wp_update_post( array('ID' => $attachment_id, 'post_parent' => $post_id));
+                        }
+
                         do_action( 'scoopit_after_wp_insert_post', $post_id, $curated_post );
                     }
                     else $create_post_error = true;

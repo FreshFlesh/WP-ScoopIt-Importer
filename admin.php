@@ -5,7 +5,9 @@
     <?php if (isset($_POST['scoopit-submit'])) : ?>
         <div class="updated"><p><?php _e('Settings saved!'); ?></p></div>
     <?php endif; ?>
-
+    <?php if (isset($_POST['scoopit-force'])) : ?>
+        <div class="updated"><p><?php _e('Import executed.'); ?></p></div>
+    <?php endif; ?>
 
     <form method="post" action="<?php echo get_admin_url().'options-general.php?page='.self::SLUG; ?>">
 
@@ -198,6 +200,14 @@
     
     <h3 class="title"><?php _e('Statistics'); ?></h3>
     
-    <p>Last import : <strong><?php echo date('Y-m-d H:i:s', get_option('scoopit.last_update') / 1000);?></strong></p>  
-    
+    <p>Last import : <strong><?php echo date('Y-m-d H:i:s', get_option('scoopitimporter.last_update'));?></strong></p>
+
+    <form method="post" action="<?php echo get_admin_url().'options-general.php?page='.self::SLUG; ?>">
+      <?php wp_nonce_field('scoopit-form-force'); ?>
+            <input class="button button-primary"
+                   type="submit"
+                   name="scoopit-force"
+                   id="scoopit-force"
+                   value="Force import now" />
+    </form>
 </div>
